@@ -57,6 +57,20 @@ class GitViewModel {
     private var cancellables = Set<AnyCancellable>()
     private let gitService = GitService()
 
+    // GitHub Properties
+//    private let githubService = GitHubService(authToken: )
+    private let githubService = GitHubService()
+    var pullRequests: [PullRequest] = []
+    var selectedPullRequest: PullRequest?
+    var isLoadingPullRequests = false
+    var pullRequestError: String?
+
+
+    func updateAuthToken(_ token: String) {
+        Task { @MainActor in
+            await githubService.updateToken(token)
+        }
+    }
     init() {
 
         loadWorkspaceCommands()
@@ -238,28 +252,6 @@ class GitViewModel {
             // Refresh repository data
             await refreshState()
 //            await loadRepositoryData(from: url)
-        } catch {
-            errorMessage = "Pull failed: \(error.localizedDescription)"
-        }
-    }
-    
-    func pull(remote: String, remoteBranch: String, localBranch: String, options: PullSheet.PullOptions) async {
-        guard let url = repositoryURL else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            // You may need to update your gitService.pull to accept these options and pass the correct arguments
-            try await gitService.pull(
-                in: url,
-                remote: remote,
-                remoteBranch: remoteBranch,
-                localBranch: localBranch,
-                commitMerged: options.commitMerged,
-                includeMessages: options.includeMessages,
-                createNewCommit: options.createNewCommit,
-                rebaseInsteadOfMerge: options.rebaseInsteadOfMerge
-            )
-            await loadRepositoryData(from: url)
         } catch {
             errorMessage = "Pull failed: \(error.localizedDescription)"
         }
@@ -556,7 +548,44 @@ class GitViewModel {
         }
     }
 
+    func pull(remote: String, remoteBranch: String, localBranch: String, options: PullSheet.PullOptions) async {
+    guard let url = repositoryURL else { return }
+    isLoading = true
+    defer { isLoading = false }
+    do {
+        // You may need to update your gitService.pull to accept these options and pass the correct arguments
+        try await gitService.pull(
+            in: url,
+            remote: remote,
+            remoteBranch: remoteBranch,
+            localBranch: localBranch,
+            commitMerged: options.commitMerged,
+            includeMessages: options.includeMessages,
+            createNewCommit: options.createNewCommit,
+            rebaseInsteadOfMerge: options.rebaseInsteadOfMerge
+        )
+        await loadRepositoryData(from: url)
+    } catch {
+        errorMessage = "Pull failed: \(error.localizedDescription)"
+    }
+}
+
     // MARK: - Sync Operations
+    func pull() async {
+        guard let url = repositoryURL else { return }
+        do {
+            isLoading = true
+            defer { isLoading = false }
+
+            try await gitService.pull(in: url)
+            try await syncState.sync()
+
+            // Reload repository data
+            await loadRepositoryData(from: url)
+        } catch {
+            errorMessage = "Error pulling changes: \(error.localizedDescription)"
+        }
+    }
 
     func push() async {
         guard let url = repositoryURL else { return }
@@ -648,6 +677,115 @@ class GitViewModel {
             errorMessage = "Push failed: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - GitHub Pull Request Operations
+
+    func loadPullRequests() async {
+        guard let url = repositoryURL else { return }
+
+        do {
+            isLoadingPullRequests = true
+            defer { isLoadingPullRequests = false }
+
+            // Get repository owner and name from remote URL
+            let remoteURL = try await gitService.getRemoteURL(in: url)
+            let (owner, repo) = try parseGitHubURL(remoteURL)
+
+            // Fetch pull requests
+            pullRequests = try await githubService.fetchPullRequests(for: repo, owner: owner)
+
+            // For each PR, fetch its files
+            for i in 0..<pullRequests.count {
+                let files = try await githubService.fetchPullRequestFiles(
+                    owner: owner,
+                    repo: repo,
+                    number: pullRequests[i].number
+                )
+                pullRequests[i].files = files
+            }
+        } catch {
+            isLoadingPullRequests = false
+            pullRequestError = "Error loading pull requests: \(error.localizedDescription)"
+        }
+    }
+
+    func loadPullRequestDetails(_ pr: PullRequest) async {
+        guard let url = repositoryURL else { return }
+
+        do {
+            let remoteURL = try await gitService.getRemoteURL(in: url)
+            let (owner, repo) = try parseGitHubURL(remoteURL)
+
+            let details = try await githubService.fetchPullRequestDetails(
+                owner: owner,
+                repo: repo,
+                number: pr.number
+            )
+
+            if let index = pullRequests.firstIndex(where: { $0.id == pr.id }) {
+                pullRequests[index] = details
+            }
+
+            selectedPullRequest = details
+        } catch {
+            pullRequestError = "Error loading pull request details: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Pull Request Operations
+    func createPullRequest(title: String, body: String, head: String, base: String) async {
+        guard let url = repositoryURL else {
+            pullRequestError = "No repository selected"
+            return
+        }
+
+        isLoadingPullRequests = true
+        pullRequestError = nil
+
+        do {
+            // Get repository owner and name from remote URL
+            let remoteURL = try await gitService.getRemoteURL(in: url)
+            let (owner, repo) = try parseGitHubURL(remoteURL)
+
+            // Create the pull request
+            let newPR = try await githubService.createPullRequest(
+                owner: owner,
+                repo: repo,
+                title: title,
+                body: body,
+                head: head,
+                base: base
+            )
+
+            // Refresh pull requests list
+            await loadPullRequests()
+
+            // Select the newly created PR
+            selectedPullRequest = newPR
+
+        } catch let error as GitHubError {
+            pullRequestError = error.localizedDescription
+        } catch {
+            pullRequestError = "Failed to create pull request: \(error.localizedDescription)"
+        }
+
+        isLoadingPullRequests = false
+    }
+
+    private func parseGitHubURL(_ url: String) throws -> (owner: String, repo: String) {
+        // Handle both HTTPS and SSH URLs
+        let pattern = #"(?:https://github\.com/|git@github\.com:)([^/]+)/([^/]+)(?:\.git)?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)),
+              let ownerRange = Range(match.range(at: 1), in: url),
+              let repoRange = Range(match.range(at: 2), in: url) else {
+            throw GitHubError.invalidResponse
+        }
+
+        let owner = String(url[ownerRange])
+        let repo = String(url[repoRange])
+        return (owner, repo)
+    }
 }
 
 extension GitViewModel {
@@ -661,3 +799,5 @@ extension GitViewModel {
         syncState.commitsAhead ?? 0
     }
 }
+
+

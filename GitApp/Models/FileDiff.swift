@@ -126,7 +126,7 @@ struct FileDiff: Identifiable, Hashable {
         }
         return "n"
     }
-    var raw: String
+    var raw: String = ""
 
     private static func extractChunks(from lines: [String]) -> [String] {
         var chunks: [String] = []
@@ -150,7 +150,7 @@ struct FileDiff: Identifiable, Hashable {
         return chunks
     }
 
-    init(raw: String) throws {
+    init(raw: String) throws  {
         self.raw = raw
         let splited = raw.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
         let firstLine = splited.first

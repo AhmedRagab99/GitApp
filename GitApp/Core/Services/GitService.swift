@@ -270,4 +270,8 @@ actor GitService {
     func unstageAllChanges(in directory: URL) async throws {
         _ = try await Process.output(GitUnstageAll(directory: directory))
     }
+
+    func getRemoteURL(in directory: URL) async throws -> String {
+        try await Process.output(GitRemoteGetURL(directory: directory))
+    }
 }

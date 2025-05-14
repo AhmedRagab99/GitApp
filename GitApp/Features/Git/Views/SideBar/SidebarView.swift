@@ -98,6 +98,7 @@ struct SidebarView: View {
     @State private var filterText: String = ""
     @State private var selectedSidebarItem: SidebarItem? = .workspace(.history)
     @State private var sidebarItems: [SidebarItem] = []
+    @State private var showingPullRequests = false
 
     var body: some View {
         SwiftUISidebarView(
@@ -110,8 +111,8 @@ struct SidebarView: View {
             onStashAction: handleStashAction,
             refresh: refreshSidebar
         )
-        .frame(minWidth: 240)        
-        
+        .frame(minWidth: 240)
+
         .onChange(of: viewModel.branches) {
             refreshSidebar()
         }
@@ -124,11 +125,14 @@ struct SidebarView: View {
         .onChange(of: viewModel.stashes) {
             refreshSidebar()
         }
-        .onChange(of: selectedSidebarItem) { newValue in
-            if case let .workspace(item) = newValue {
-                selectedWorkspaceItem = item
-            }
-        }
+//        .onChange(of: selectedSidebarItem) { newValue in
+//            if case let .workspace(item) = newValue {
+//                selectedWorkspaceItem = item
+//                if item == .pullRequests {
+//                    showingPullRequests = true
+//                }
+//            }
+//        }
     }
 
     private func handleBranchAction(_ action: BranchContextAction, _ branch: Branch) {
@@ -168,7 +172,7 @@ struct SidebarView: View {
             }
             refreshSidebar()
         }
-    
+
     private func handleStashAction(_ action: StashContextAction, _ tag: Stash)  {
         switch action {
         case .apply:
@@ -202,8 +206,8 @@ struct SidebarView: View {
         // Tags section
         items.append(.section("Tags"))
         items.append(contentsOf: viewModel.tags.map { .tag($0) })
-        
-        
+
+
         sidebarItems = items
     }
 

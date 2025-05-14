@@ -10,6 +10,7 @@ import AppKit
 
 struct RepositorySelectionView: View {
     var viewModel: RepositoryViewModel
+    @EnvironmentObject var accountStore: AccountsStore
     @State private var selectedRepository: URL?
     @State private var isShowingFilePicker = false
     @State private var isShowingCloneSheet = false
@@ -151,7 +152,17 @@ struct RepositorySelectionView: View {
         if  isWindowVisible(id: windowId) {
             bringWindowToFront(id: windowId)
         } else {
-            openNewWindow(with: GitClientView(viewModel: GitViewModel(), url: url), id: windowId, title: windowId, width: (NSScreen.main?.frame.width ?? 600) / 2, height: (NSScreen.main?.frame.height ?? 600) / 2)
+            let viewModel = GitViewModel()
+//            let account = accountStore.accounts.first(where: { $0.isDefault && $0.provider == .github })!
+            
+//             viewModel.updateAuthToken(accountStore.token(for: account) ?? "")
+            let view = GitClientView(viewModel:viewModel, url: url)
+//            func updateAuthToken(_ token: String) {
+//                Task { @MainActor in
+//                    await githubService.updateToken(token)
+//                }
+//            }
+            openNewWindow(with: view, id: windowId, title: windowId, width: (NSScreen.main?.frame.width ?? 600) / 2, height: (NSScreen.main?.frame.height ?? 600) / 2)
         }
     }
 }

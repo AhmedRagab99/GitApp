@@ -112,32 +112,6 @@ enum Language: String, CaseIterable {
             return .blue
         }
 
-        // Keywords (language-specific)
-        switch self {
-        case .swift:
-            let swiftKeywords = ["func", "class", "struct", "enum", "protocol", "extension", "var", "let", "if", "else", "for", "while", "return", "import"]
-            if swiftKeywords.contains(where: { trimmedLine.contains($0) }) {
-                return .purple
-            }
-        case .python:
-            let pythonKeywords = ["def", "class", "if", "else", "for", "while", "return", "import", "from", "as"]
-            if pythonKeywords.contains(where: { trimmedLine.contains($0) }) {
-                return .purple
-            }
-        case .javascript, .typescript:
-            let jsKeywords = ["function", "class", "const", "let", "var", "if", "else", "for", "while", "return", "import", "export"]
-            if jsKeywords.contains(where: { trimmedLine.contains($0) }) {
-                return .purple
-            }
-        case .java, .kotlin:
-            let javaKeywords = ["public", "private", "protected", "class", "interface", "void", "int", "String", "if", "else", "for", "while", "return", "import"]
-            if javaKeywords.contains(where: { trimmedLine.contains($0) }) {
-                return .purple
-            }
-        default:
-            break
-        }
-
         return .primary
     }
 
